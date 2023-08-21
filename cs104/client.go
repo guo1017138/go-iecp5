@@ -63,6 +63,7 @@ type Client struct {
 
 	onConnect        func(c *Client)
 	onConnectionLost func(c *Client)
+	onActive         func(c *Client)
 }
 
 // NewClient returns an IEC104 master,default config and default asdu.ParamsWide params
@@ -77,6 +78,7 @@ func NewClient(handler ClientHandlerInterface, o *ClientOption) *Client {
 		Clog:             clog.NewLogger("cs104 client => "),
 		onConnect:        func(*Client) {},
 		onConnectionLost: func(*Client) {},
+		onActive:         func(*Client) {},
 	}
 }
 
@@ -92,6 +94,14 @@ func (sf *Client) SetOnConnectHandler(f func(c *Client)) *Client {
 func (sf *Client) SetConnectionLostHandler(f func(c *Client)) *Client {
 	if f != nil {
 		sf.onConnectionLost = f
+	}
+	return sf
+}
+
+// SetOnActiveHandler set on active handler
+func (sf *Client) SetOnActiveHandler(f func(c *Client)) *Client {
+	if f != nil {
+		sf.onActive = f
 	}
 	return sf
 }
@@ -386,8 +396,12 @@ func (sf *Client) run(ctx context.Context) {
 				//	sf.sendUFrame(uStartDtConfirm)
 				//	atomic.StoreUint32(&sf.isActive, active)
 				case uStartDtConfirm:
+					oldV := sf.isActive
 					atomic.StoreUint32(&sf.isActive, active)
 					sf.startDtActiveSendSince.Store(willNotTimeout)
+					if oldV == inactive {
+						sf.onActive(sf)
+					}
 				//case uStopDtActive:
 				//	sf.sendUFrame(uStopDtConfirm)
 				//	atomic.StoreUint32(&sf.isActive, inactive)
@@ -582,7 +596,7 @@ func (sf *Client) SendStopDt() {
 	sf.sendUFrame(uStopDtActive)
 }
 
-//InterrogationCmd wrap asdu.InterrogationCmd
+// InterrogationCmd wrap asdu.InterrogationCmd
 func (sf *Client) InterrogationCmd(coa asdu.CauseOfTransmission, ca asdu.CommonAddr, qoi asdu.QualifierOfInterrogation) error {
 	return asdu.InterrogationCmd(sf, coa, ca, qoi)
 }
